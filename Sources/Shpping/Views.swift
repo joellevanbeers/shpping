@@ -496,6 +496,17 @@ struct DayStartView: View {
                     Label12(text: "Vandaag")
                 }
 
+                if !store.newThoughts.isEmpty {
+                    Section {
+                        ForEach(store.newThoughts) { th in
+                            ThoughtRow(thought: th, showLater: true)
+                                .listRowSeparator(.hidden)
+                        }
+                    } header: {
+                        Label12(text: "Geparkeerd")
+                    }
+                }
+
                 if !store.laterThoughts.isEmpty {
                     Section {
                         ForEach(store.laterThoughts) { th in
@@ -503,7 +514,7 @@ struct DayStartView: View {
                                 .listRowSeparator(.hidden)
                         }
                     } header: {
-                        Label12(text: "Geparkeerd voor later")
+                        Label12(text: "Voor later")
                     }
                 }
             }

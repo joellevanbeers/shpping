@@ -78,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(item("Gedachte parkeren…   ⌃⌥Spatie", #selector(openParker)))
         menu.addItem(item("Dagstart…", #selector(openDayStart)))
+        let parked = Store.shared.data.thoughts.count
+        if parked > 0 {
+            menu.addItem(item("Geparkeerde gedachten (\(parked))…", #selector(openDayStart)))
+        }
         menu.addItem(.separator())
 
         let login = item("Openen bij inloggen", #selector(toggleLogin))
