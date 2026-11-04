@@ -17,14 +17,30 @@ final class FocusController: ObservableObject {
     var session: Session? { store.data.session }
     var isRunning: Bool { session != nil }
 
-    var currentTask: TaskItem? {
-        guard let s = session else { return nil }
-        return store.task(s.taskID)
+    /// Alle taken van deze sessie, in volgorde.
+    var sessionTasks: [TaskItem] {
+        guard let s = session else { return [] }
+        return s.taskIDs.compactMap { store.task($0) }
+    }
+
+    /// De eerste taak van de sessie die nog niet af is.
+    var currentTask: TaskItem? { sessionTasks.first { !$0.done } }
+
+    /// Positie van de huidige taak, bijv. (2, 3) = taak 2 van 3.
+    var progress: (current: Int, total: Int) {
+        let tasks = sessionTasks
+        let done = tasks.filter(\.done).count
+        return (min(done + 1, tasks.count), tasks.count)
     }
 
     var minutesLeft: Int {
         guard let s = session else { return 0 }
         return max(0, Int(ceil(s.end.timeIntervalSince(now) / 60)))
+    }
+
+    var secondsLeft: Int {
+        guard let s = session else { return 0 }
+        return max(0, Int(s.end.timeIntervalSince(now).rounded()))
     }
 
     /// Hervat een sessie die nog liep toen de app werd afgesloten.
@@ -39,10 +55,11 @@ final class FocusController: ObservableObject {
         }
     }
 
-    func start(taskID: UUID, minutes: Int) {
+    func start(taskIDs: [UUID], minutes: Int) {
+        guard !taskIDs.isEmpty else { return }
         let wasRunning = isRunning
         let start = Date()
-        store.data.session = Session(taskID: taskID, start: start, end: start.addingTimeInterval(Double(minutes) * 60))
+        store.data.session = Session(taskIDs: taskIDs, start: start, end: start.addingTimeInterval(Double(minutes) * 60))
         now = start
         startTimer()
         WindowManager.shared.showBar()
@@ -60,12 +77,24 @@ final class FocusController: ObservableObject {
         Self.runShortcut(Self.shortcutOff)
         refreshMenuIcon()
         NSSound(named: "Glass")?.play()
-        WindowManager.shared.showEnd(taskID: s.taskID)
+        WindowManager.shared.showEnd(taskIDs: s.taskIDs)
+    }
+
+    /// Vinkt de huidige taak af en gaat door naar de volgende. Laatste taak af = sessie klaar.
+    func completeCurrent() {
+        guard let t = currentTask else { return }
+        store.setDone(t.id, true)
+        if currentTask == nil {
+            stop()
+        } else {
+            NSSound(named: "Pop")?.play()
+            objectWillChange.send()
+        }
     }
 
     private func startTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             Task { @MainActor in FocusController.shared.tick() }
         }
     }

@@ -90,7 +90,7 @@ final class WindowManager {
         }
         guard let bar else { return }
         let s = menuBarScreen
-        let size = NSSize(width: 460, height: 26)
+        let size = NSSize(width: 520, height: 26)
         bar.setFrame(NSRect(x: s.frame.midX - size.width / 2,
                             y: s.visibleFrame.maxY - size.height - 4,
                             width: size.width, height: size.height), display: true)
@@ -104,7 +104,7 @@ final class WindowManager {
     func showPicker() {
         rememberFrontApp()
         dismissAll(except: nil)
-        let p = KeyPanel(size: NSSize(width: 440, height: 420))
+        let p = KeyPanel(size: NSSize(width: 440, height: 460))
         p.contentView = NSHostingView(rootView: PickerView())
         picker = p
         placeTop(p)
@@ -127,12 +127,12 @@ final class WindowManager {
 
     // MARK: Einde sessie
 
-    func showEnd(taskID: UUID) {
+    func showEnd(taskIDs: [UUID]) {
         rememberFrontApp()
         dismissAll(except: nil)
-        let p = KeyPanel(size: NSSize(width: 440, height: 460))
+        let p = KeyPanel(size: NSSize(width: 440, height: 480))
         p.closeOnResign = false
-        p.contentView = NSHostingView(rootView: EndView(taskID: taskID))
+        p.contentView = NSHostingView(rootView: EndView(taskIDs: taskIDs))
         end = p
         placeTop(p)
         activate()

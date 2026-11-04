@@ -21,9 +21,32 @@ struct Thought: Codable, Identifiable, Equatable {
 }
 
 struct Session: Codable, Equatable {
-    var taskID: UUID
+    var taskIDs: [UUID]      // in volgorde van de daglijst
     var start: Date
     var end: Date
+
+    init(taskIDs: [UUID], start: Date, end: Date) {
+        self.taskIDs = taskIDs
+        self.start = start
+        self.end = end
+    }
+
+    private enum CodingKeys: String, CodingKey { case taskIDs, taskID, start, end }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Oudere versie bewaarde één taskID.
+        taskIDs = try c.decodeIfPresent([UUID].self, forKey: .taskIDs) ?? [c.decode(UUID.self, forKey: .taskID)]
+        start = try c.decode(Date.self, forKey: .start)
+        end = try c.decode(Date.self, forKey: .end)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(taskIDs, forKey: .taskIDs)
+        try c.encode(start, forKey: .start)
+        try c.encode(end, forKey: .end)
+    }
 }
 
 struct AppData: Codable {

@@ -45,30 +45,49 @@ struct FocusBarView: View {
     @ObservedObject var focus = FocusController.shared
     @ObservedObject var store = Store.shared
 
+    /// "34 min", en in de laatste minuut "0:42".
+    private var timeText: String {
+        let secs = focus.secondsLeft
+        return secs < 60 ? String(format: "0:%02d", secs) : "\(focus.minutesLeft) min"
+    }
+
     var body: some View {
         let s = store.data.session
         let total = s.map { $0.end.timeIntervalSince($0.start) } ?? 1
         let left = s.map { max(0, $0.end.timeIntervalSince(focus.now)) } ?? 0
         let fraction = total > 0 ? left / total : 0
-        let title = s.flatMap { store.task($0.taskID)?.title } ?? ""
+        let title = focus.currentTask?.title ?? ""
+        let progress = focus.progress
 
         ZStack(alignment: .bottomLeading) {
             Capsule().fill(Color.ink.opacity(0.88))
-            Text(title)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(1)
-                .padding(.horizontal, 16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 10) {
+                if progress.total > 1 {
+                    Text("\(progress.current)/\(progress.total)")
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.tech)
+                }
+                Text(title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(timeText)
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             GeometryReader { g in
                 Capsule()
                     .fill(Color.tech)
                     .frame(width: max(0, (g.size.width - 24) * fraction), height: 2.5)
                     .offset(x: 12, y: g.size.height - 4)
-                    .animation(.linear(duration: 2), value: fraction)
+                    .animation(.linear(duration: 1), value: fraction)
             }
         }
-        .frame(width: 460, height: 26)
+        .frame(width: 520, height: 26)
     }
 }
 
@@ -76,7 +95,7 @@ struct FocusBarView: View {
 
 struct PickerView: View {
     @ObservedObject var store = Store.shared
-    @State private var selected: UUID?
+    @State private var selected: Set<UUID> = []
     @State private var minutes: Int = UserDefaults.standard.object(forKey: "lastMinutes") as? Int ?? 90
 
     private let presets = [25, 45, 60, 90]
@@ -84,8 +103,12 @@ struct PickerView: View {
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Waar ga je aan werken?")
-                    .font(.system(size: 20, weight: .bold))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Waar ga je aan werken?")
+                        .font(.system(size: 20, weight: .bold))
+                    Text("Kies één taak, of vink er een paar aan voor deze sessie.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                }
 
                 let tasks = store.openTodayTasks
                 if tasks.isEmpty {
@@ -121,19 +144,19 @@ struct PickerView: View {
                     }
 
                     HStack {
-                        Text("1–9 kiest een taak · ↩ start · esc sluit")
+                        Text("1–9 vinkt aan · ↩ start · esc sluit")
                             .font(.system(size: 11)).foregroundStyle(.tertiary)
                         Spacer()
                         Button(action: start) {
-                            Text("Start focus")
+                            Text(selected.count > 1 ? "Start focus (\(selected.count) taken)" : "Start focus")
                                 .font(.system(size: 13, weight: .semibold))
                                 .padding(.horizontal, 18).padding(.vertical, 8)
                                 .foregroundStyle(.white)
-                                .background(selected == nil ? Color.wine.opacity(0.4) : Color.wine, in: Capsule())
+                                .background(selected.isEmpty ? Color.wine.opacity(0.4) : Color.wine, in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .keyboardShortcut(.defaultAction)
-                        .disabled(selected == nil)
+                        .disabled(selected.isEmpty)
                     }
                 }
             }
@@ -142,9 +165,14 @@ struct PickerView: View {
     }
 
     private func taskRow(_ t: TaskItem, index: Int) -> some View {
-        let isSel = selected == t.id
-        return Button { selected = t.id } label: {
+        let isSel = selected.contains(t.id)
+        return Button {
+            if isSel { selected.remove(t.id) } else { selected.insert(t.id) }
+        } label: {
             HStack(spacing: 10) {
+                Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(isSel ? Color.white : Color.secondary)
                 Text(index < 9 ? "\(index + 1)" : "")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(isSel ? Color.white.opacity(0.8) : Color.secondary)
@@ -177,9 +205,11 @@ struct PickerView: View {
     }
 
     private func start() {
-        guard let selected else { return }
+        // Volgorde van de daglijst aanhouden, niet de klikvolgorde.
+        let ids = store.openTodayTasks.map(\.id).filter { selected.contains($0) }
+        guard !ids.isEmpty else { return }
         UserDefaults.standard.set(minutes, forKey: "lastMinutes")
-        FocusController.shared.start(taskID: selected, minutes: minutes)
+        FocusController.shared.start(taskIDs: ids, minutes: minutes)
         WindowManager.shared.closePicker()
     }
 }
@@ -227,7 +257,7 @@ struct ParkView: View {
 // MARK: - Einde sessie
 
 struct EndView: View {
-    let taskID: UUID
+    let taskIDs: [UUID]
     @ObservedObject var store = Store.shared
     @State private var celebrated = false
 
@@ -241,34 +271,60 @@ struct EndView: View {
     ]
     @State private var nudge = EndView.nudges.randomElement()!
 
+    private var tasks: [TaskItem] { taskIDs.compactMap { store.task($0) } }
+    private var openIDs: [UUID] { tasks.filter { !$0.done }.map(\.id) }
+    private var doneInSession: Int { tasks.filter(\.done).count }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
                 if celebrated {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Afgevinkt. Lekker bezig!")
+                        Text("Lekker bezig!")
                             .font(.system(size: 22, weight: .bold))
                         Text(doneLine).foregroundStyle(.secondary)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Label12(text: "Sessie klaar")
-                        Text(store.task(taskID)?.title ?? "Je taak")
+                        Text(tasks.count > 1 ? "Wat heb je afgekregen?" : "Is het af?")
                             .font(.system(size: 20, weight: .bold))
-                            .lineLimit(3)
+                    }
+                    VStack(spacing: 6) {
+                        ForEach(tasks) { t in
+                            Button { store.setDone(t.id, !t.done) } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: t.done ? "checkmark.circle.fill" : "circle")
+                                        .font(.system(size: 16, weight: .light))
+                                        .foregroundStyle(t.done ? Color.wine : Color.secondary)
+                                    Text(t.title)
+                                        .font(.system(size: 14))
+                                        .strikethrough(t.done)
+                                        .foregroundStyle(t.done ? Color.secondary : Color.primary)
+                                        .lineLimit(2)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     HStack(spacing: 8) {
-                        PillButton(title: "✓  Afgevinkt") {
-                            store.setDone(taskID, true)
-                            withAnimation(.spring(duration: 0.35)) { celebrated = true }
+                        PillButton(title: "Klaar") {
+                            if doneInSession > 0 {
+                                withAnimation(.spring(duration: 0.35)) { celebrated = true }
+                            } else {
+                                WindowManager.shared.closeEnd()
+                            }
                         }
                         .keyboardShortcut(.defaultAction)
-                        PillButton(title: "Nog 10 minuten", primary: false) {
-                            FocusController.shared.start(taskID: taskID, minutes: 10)
-                            WindowManager.shared.closeEnd()
-                        }
-                        PillButton(title: "Nog niet af", primary: false) {
-                            WindowManager.shared.closeEnd()
+                        if !openIDs.isEmpty {
+                            PillButton(title: "Nog 10 minuten", primary: false) {
+                                FocusController.shared.start(taskIDs: openIDs, minutes: 10)
+                                WindowManager.shared.closeEnd()
+                            }
                         }
                     }
                 }
@@ -294,7 +350,7 @@ struct EndView: View {
                 if celebrated {
                     HStack(spacing: 8) {
                         if !store.openTodayTasks.isEmpty {
-                            PillButton(title: "Volgende taak kiezen") {
+                            PillButton(title: "Volgende sessie kiezen") {
                                 WindowManager.shared.closeEnd(restoreFocus: false)
                                 WindowManager.shared.showPicker()
                             }
@@ -307,14 +363,14 @@ struct EndView: View {
                 }
             }
         }
-        .frame(width: 440, height: 460)
+        .frame(width: 440, height: 480)
     }
 
     private var doneLine: String {
         let n = store.doneTodayCount
         let open = store.openTodayTasks.count
-        let first = n == 1 ? "Je eerste taak van vandaag is af." : "Je hebt vandaag al \(n) taken afgerond."
-        return open == 0 ? first + " Alles van je lijst is klaar." : first
+        let line = n == 1 ? "Je eerste taak van vandaag is af." : "Je hebt vandaag al \(n) taken afgerond."
+        return open == 0 ? line + " Alles van je lijst is klaar." : line
     }
 }
 

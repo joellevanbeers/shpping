@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         HotKeys.register(id: 2, keyCode: kVK_Space, modifiers: controlKey | optionKey) {
             WindowManager.shared.showParker()
         }
+        // ⌃⌥D = huidige taak afvinken, door naar de volgende
+        HotKeys.register(id: 3, keyCode: kVK_ANSI_D, modifiers: controlKey | optionKey) {
+            FocusController.shared.completeCurrent()
+        }
 
         FocusController.shared.resumeIfNeeded()
         checkNewDay()
@@ -60,14 +64,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let focus = FocusController.shared
 
         if focus.isRunning, let t = focus.currentTask {
-            let now = NSMenuItem(title: "Bezig met: \(t.title)", action: nil, keyEquivalent: "")
+            let p = focus.progress
+            let suffix = p.total > 1 ? "  (\(p.current) van \(p.total))" : ""
+            let now = NSMenuItem(title: "Bezig met: \(t.title)\(suffix)", action: nil, keyEquivalent: "")
             now.isEnabled = false
             menu.addItem(now)
             let left = NSMenuItem(title: "Nog \(focus.minutesLeft) min", action: nil, keyEquivalent: "")
             left.isEnabled = false
             menu.addItem(left)
+            menu.addItem(item("Taak afvinken   ⌃⌥D", #selector(completeTask)))
             menu.addItem(item("Sessie afronden", #selector(stopFocus)))
-            menu.addItem(item("Andere taak kiezen…", #selector(openPicker)))
+            menu.addItem(item("Andere taken kiezen…", #selector(openPicker)))
         } else {
             menu.addItem(item("Focus starten…   ⌃⌥F", #selector(openPicker)))
         }
@@ -93,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openParker() { WindowManager.shared.showParker() }
     @objc private func openDayStart() { WindowManager.shared.showDayStart() }
     @objc private func stopFocus() { FocusController.shared.stop(); updateIcon() }
+    @objc private func completeTask() { FocusController.shared.completeCurrent() }
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc private func toggleLogin() {
