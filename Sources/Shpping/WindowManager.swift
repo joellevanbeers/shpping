@@ -32,7 +32,12 @@ final class KeyPanel: NSPanel {
     }
 }
 
-/// De dunne focusbalk bovenin het scherm. Klikken gaan er dwars doorheen.
+/// Laat knoppen meteen reageren, ook als het paneel niet actief is.
+final class FirstMouseHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// De dunne focusbalk bovenin het scherm. Neemt nooit de focus over van je werk.
 final class BarPanel: NSPanel {
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
@@ -42,7 +47,8 @@ final class BarPanel: NSPanel {
         backgroundColor = .clear
         isOpaque = false
         hasShadow = false
-        ignoresMouseEvents = true
+        ignoresMouseEvents = false
+        becomesKeyOnlyIfNeeded = true
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
     }
@@ -85,7 +91,7 @@ final class WindowManager {
     func showBar() {
         if bar == nil {
             let p = BarPanel()
-            p.contentView = NSHostingView(rootView: FocusBarView())
+            p.contentView = FirstMouseHostingView(rootView: FocusBarView())
             bar = p
         }
         guard let bar else { return }

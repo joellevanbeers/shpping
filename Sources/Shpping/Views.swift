@@ -76,8 +76,9 @@ struct FocusBarView: View {
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.white.opacity(0.65))
+                DoneButton()
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, 16).padding(.trailing, 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             GeometryReader { g in
                 Capsule()
@@ -88,6 +89,24 @@ struct FocusBarView: View {
             }
         }
         .frame(width: 520, height: 26)
+    }
+}
+
+/// Vinkje in de focusbalk: één tik = huidige taak af.
+struct DoneButton: View {
+    @State private var hovering = false
+    var body: some View {
+        Button { FocusController.shared.completeCurrent() } label: {
+            Image(systemName: "checkmark")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(hovering ? Color.ink : Color.tech)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(hovering ? Color.tech : Color.tech.opacity(0.18)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Taak af")
     }
 }
 
