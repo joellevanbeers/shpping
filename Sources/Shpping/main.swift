@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func updateIcon() {
         let running = FocusController.shared.isRunning
-        let img = NSImage(systemSymbolName: running ? "shippingbox.fill" : "shippingbox", accessibilityDescription: "Shpping")
+        let img = NSImage(systemSymbolName: running ? "flame.fill" : "flame", accessibilityDescription: "Shpping")
         img?.isTemplate = true
         statusItem.button?.image = img
     }
